@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pi-hole Control</title>
+    <link rel="stylesheet" href="index.css">
+    
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🛡️</div>
+        <h1>Pi-hole Control</h1>
+        <p class="subtitle">DNS-Blocking verwalten</p>
+
+        <div class="status-card" id="statusCard">
+            <div class="status-icon" id="statusIcon">⏳</div>
+            <div class="status-text" id="statusText">Status wird geladen...</div>
+            <div class="status-description" id="statusDescription">Bitte warten...</div>
+        </div>
+
+        <div class="timer-display" id="timerDisplay">
+            <div class="timer-text">⏱️ Automatische Reaktivierung in:</div>
+            <div class="timer-countdown" id="timerCountdown">--:--</div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            Verarbeitung...
+        </div>
+
+        <div class="message" id="message"></div>
+
+        <div class="controls">
+            <button class="btn btn-enable" id="enableBtn" onclick="toggleBlocking(true)">
+                ✅ Aktivieren
+            </button>
+            <button class="btn btn-disable" id="disableBtn" onclick="toggleBlocking(false)">
+                ❌ Deaktivieren
+            </button>
+        </div>
+
+        <div class="timer-section">
+            <div class="timer-title">⏲️ Zeitgesteuerte Deaktivierung</div>
+            <p style="font-size: 0.9rem; color: #666; margin-bottom: 15px;">
+                Klicken Sie auf einen Timer-Button, um Pi-hole für die gewählte Zeit zu deaktivieren:
+            </p>
+            <div class="timer-options">
+                <button class="timer-btn" onclick="disableWithTimer(300)">5 Min</button>
+                <button class="timer-btn" onclick="disableWithTimer(600)">10 Min</button>
+                <button class="timer-btn" onclick="disableWithTimer(1800)">30 Min</button>
+                <button class="timer-btn" onclick="disableWithTimer(3600)">1 Std</button>
+            </div>
+            <div class="custom-timer">
+                <input type="number" id="customTimer" placeholder="Sekunden eingeben..." min="1">
+                <button class="btn btn-disable" onclick="disableWithCustomTimer()">Anwenden</button>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>🚀 Pi-hole Control Panel by Carsten Graf</p>
+        </div>
+    </div>
+
+    <script>
+        let selectedTimer = null;
+        let countdownInterval = null;
+        let remainingSeconds = 0;
+
+        // Status beim Laden der Seite abrufen
+        document.addEventListener('DOMContentLoaded', function() {
+            getStatus();
+            // Status alle 10 Sekunden aktualisieren
+            setInterval(getStatus, 10000);
+        });
+
+        async function getStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                if (data.success) {
+                    updateStatusDisplay(data.status, data.timer);
+                } else {
+                    showMessage('Fehler beim Laden des Status: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Verbindungsfehler: ' + error.message, 'error');
+            }
+        }
+
+        function updateStatusDisplay(blocking, timer) {
+            const statusCard = document.getElementById('statusCard');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusText = document.getElementById('statusText');
+            const statusDescription = document.getElementById('statusDescription');
+            const timerDisplay = document.getElementById('timerDisplay');
+
+            if (blocking) {
+                statusCard.className = 'status-card enabled';
+                statusIcon.textContent = '🛡️';
+                statusText.textContent = 'DNS-Blocking Aktiv';
+                statusText.className = 'status-text enabled';
+                statusDescription.textContent = 'Werbung und Tracker werden blockiert';
+                
+                // Timer ausblenden wenn aktiv
+                timerDisplay.classList.remove('show');
+                stopCountdown();
+            } else {
+                statusCard.className = 'status-card disabled';
+                statusIcon.textContent = '⚠️';
+                statusText.textContent = 'DNS-Blocking Inaktiv';
+                statusText.className = 'status-text disabled';
+                statusDescription.textContent = 'Keine Filterung aktiv';
+                
+                // Timer anzeigen wenn vorhanden
+                if (timer && timer > 0) {
+                    timerDisplay.classList.add('show');
+                    startCountdown(Math.floor(timer));
+                } else {
+                    timerDisplay.classList.remove('show');
+                    stopCountdown();
+                }
+            }
+        }
+
+        function startCountdown(seconds) {
+            remainingSeconds = seconds;
+            
+            // Vorheriges Intervall stoppen
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            
+            // Sofort anzeigen
+            updateCountdownDisplay();
+            
+            // Jede Sekunde aktualisieren
+            countdownInterval = setInterval(() => {
+                remainingSeconds--;
+                updateCountdownDisplay();
+                
+                if (remainingSeconds <= 0) {
+                    stopCountdown();
+                    // Status neu laden wenn Timer abgelaufen
+                    setTimeout(getStatus, 1000);
+                }
+            }, 1000);
+        }
+
+        function stopCountdown() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+        }
+
+        function updateCountdownDisplay() {
+            const timerCountdown = document.getElementById('timerCountdown');
+            
+            if (remainingSeconds <= 0) {
+                timerCountdown.textContent = '00:00';
+                return;
+            }
+            
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            
+            timerCountdown.textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Neue Funktion: Direkte Deaktivierung mit Timer
+        async function disableWithTimer(seconds) {
+            clearTimerSelection();
+            event.target.classList.add('active');
+            
+            const loading = document.getElementById('loading');
+            const timerBtns = document.querySelectorAll('.timer-btn');
+            
+            loading.classList.add('show');
+            timerBtns.forEach(btn => btn.disabled = true);
+            
+            try {
+                const response = await fetch('/api/disable', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ timer: seconds })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const minutes = Math.floor(seconds / 60);
+                    const remainingSeconds = seconds % 60;
+                    let timeText = '';
+                    
+                    if (minutes > 0) {
+                        timeText = `${minutes} Minute${minutes > 1 ? 'n' : ''}`;
+                        if (remainingSeconds > 0) {
+                            timeText += ` und ${remainingSeconds} Sekunde${remainingSeconds > 1 ? 'n' : ''}`;
+                        }
+                    } else {
+                        timeText = `${seconds} Sekunde${seconds > 1 ? 'n' : ''}`;
+                    }
+                    
+                    showMessage(`Pi-hole für ${timeText} deaktiviert`, 'success');
+                    updateStatusDisplay(false, seconds);
+                } else {
+                    showMessage('Fehler beim Deaktivieren: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Verbindungsfehler: ' + error.message, 'error');
+            } finally {
+                loading.classList.remove('show');
+                timerBtns.forEach(btn => btn.disabled = false);
+                clearTimerSelection();
+            }
+        }
+
+        // Neue Funktion: Custom Timer Deaktivierung
+        async function disableWithCustomTimer() {
+            const customInput = document.getElementById('customTimer');
+            const seconds = parseInt(customInput.value);
+            
+            if (!seconds || seconds <= 0) {
+                showMessage('Bitte geben Sie eine gültige Anzahl von Sekunden ein', 'error');
+                customInput.style.borderColor = '#ff6b6b';
+                return;
+            }
+            
+            await disableWithTimer(seconds);
+            customInput.value = '';
+            customInput.style.borderColor = '#ddd';
+        }
+
+        // Bestehende Funktion: Normale Aktivierung/Deaktivierung
+        async function toggleBlocking(enable) {
+            const loading = document.getElementById('loading');
+            const enableBtn = document.getElementById('enableBtn');
+            const disableBtn = document.getElementById('disableBtn');
+
+            loading.classList.add('show');
+            enableBtn.disabled = true;
+            disableBtn.disabled = true;
+
+            try {
+                const endpoint = enable ? '/api/enable' : '/api/disable';
+                const payload = enable ? {} : (selectedTimer ? { timer: selectedTimer } : {});
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    updateStatusDisplay(enable, selectedTimer);
+                    selectedTimer = null;
+                    clearTimerSelection();
+                } else {
+                    showMessage('Fehler: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Verbindungsfehler: ' + error.message, 'error');
+            } finally {
+                loading.classList.remove('show');
+                enableBtn.disabled = false;
+                disableBtn.disabled = false;
+            }
+        }
+
+        // Alte Timer-Funktion (für Rückwärtskompatibilität)
+        function setTimer(seconds) {
+            selectedTimer = seconds;
+            clearTimerSelection();
+            event.target.classList.add('active');
+        }
+
+        function setCustomTimer() {
+            const customInput = document.getElementById('customTimer');
+            const value = parseInt(customInput.value);
+            
+            if (value && value > 0) {
+                selectedTimer = value;
+                clearTimerSelection();
+                customInput.style.borderColor = '#667eea';
+            } else {
+                showMessage('Bitte geben Sie eine gültige Anzahl von Sekunden ein', 'error');
+                customInput.style.borderColor = '#ff6b6b';
+            }
+        }
+
+        function clearTimerSelection() {
+            const timerBtns = document.querySelectorAll('.timer-btn');
+            timerBtns.forEach(btn => btn.classList.remove('active'));
+            
+            const customInput = document.getElementById('customTimer');
+            customInput.style.borderColor = '#ddd';
+        }
+
+        function showMessage(text, type) {
+            const message = document.getElementById('message');
+            message.textContent = text;
+            message.className = `message ${type} show`;
+            
+            setTimeout(() => {
+                message.classList.remove('show');
+            }, 5000);
+        }
+
+        // Enter-Taste für custom timer
+        document.getElementById('customTimer').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                disableWithCustomTimer();
+            }
+        });
+
+        // Cleanup beim Verlassen der Seite
+        window.addEventListener('beforeunload', function() {
+            stopCountdown();
+        });
+    </script>
+</body>
+</html>
