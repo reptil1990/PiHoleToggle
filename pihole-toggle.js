@@ -6,7 +6,7 @@ const app = express();
 const port = 8082;
 
 // 🛠️ CONFIG
-const PIHOLE_HOST = process.env.PIHOLE_HOST || 'https://192.168.120.1:443';
+const PIHOLE_HOST = process.env.PIHOLE_HOST || 'localhost';
 const PIHOLE_API_BASE = process.env.PIHOLE_API_BASE || '/api';
 const API_KEY = process.env.PIHOLE_API_KEY;
 
@@ -185,5 +185,5 @@ app.get('/', (req, res) => {
 
 app.listen(port, () => {
   console.log(`🚀 Pi-hole toggle server running on port ${port}`);
-  console.log(`📱 Frontend available at: http://192.168.120.1:${port}`);
+  console.log(`📱 Frontend available at: http://${PIHOLE_HOST}:${port}`);
 });
