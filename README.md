@@ -23,6 +23,7 @@ A simple web control panel to enable, disable, and time-control DNS blocking on 
 Create a `.env` file in the project root:
 
 ```
+INTERFACE_PORT=8082
 PIHOLE_HOST=https://<your-pihole-ip>
 PIHOLE_API_KEY=<your-pihole-api-key>
 PIHOLE_API_BASE=/api

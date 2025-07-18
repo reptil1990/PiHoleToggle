@@ -3,9 +3,10 @@ const express = require('express');
 const axios = require('axios');
 const path = require('path');
 const app = express();
-const port = 8082;
+
 
 // 🛠️ CONFIG
+const port = process.env.INTERFACE_PORT || 8082;
 const PIHOLE_HOST = process.env.PIHOLE_HOST || 'localhost';
 const PIHOLE_API_BASE = process.env.PIHOLE_API_BASE || '/api';
 const API_KEY = process.env.PIHOLE_API_KEY;
